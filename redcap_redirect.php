@@ -38,31 +38,78 @@ require_once("redcap_connect.php");
 /* @var string $redcap_version */
 global $homepage_contact_email, $redcap_version;
 
-$requestUri = $_SERVER['REQUEST_URI'];
+// $requestUri = $_SERVER['REQUEST_URI'];
+$requestUri = filter_var($_SERVER['REQUEST_URI'], FILTER_SANITIZE_URL);
+// error_log('redcap redirect: request uri is: ' . $requestUri);
+
 
 // Check the redirectURL for a redcap version - https://regex101.com/r/jisap2/1
-$re = '/^(.*\/redcap_v)(\d+\.\d+\.\d+)(\/.*)(\?.*)$/';
+# $re = '/^(.*\/redcap_v)(\d+\.\d+\.\d+)(\/.*)(\?.*)$/';
+// TJ - https://www.regexplanet.com/share/index.html?share=yyyyuj3e86r
+$re = '/^(.*\/redcap_v)(\d+\.\d+\.\d+)(\/.*)$/'; // https://regex101.com/r/WMx39W/1
+
+/*
+EXAMPLES:
+"/redcap_v7.3.0/index.php?pid=22" -> $array[0]=/redcap_v; $array[1]=7.3.0; $array[2]=/index.php?pid=22
+"/redcap_v7.3.0/ControlCenter" -> $array[0]=/redcap_v; $array[1]=7.3.0; $array[2]=/ControlCenter
+"/redcap_v7.3.0/index.php" -> $array[0]=/redcap_v; $array[1]=7.3.0; $array[2]=/index.php
+"/redcap_v7.3.0/index.php?pid=21&page=my_first_instrument&id=1&event_id=50&instance=1&msg=edit" -> $array[0]=/redcap_v; $array[1]=7.3.0; $array[2]=/index.php?pid=21&page=my_first_instrument&id=1&event_id=50&instance=1&msg=edit;
+*/
+
 preg_match($re, $requestUri, $uriMatches);
+
+/*
+uriMatches
+0 - entire request uri (full match)
+1 - redcap version prefix - "redcap_v"
+2 - redcap version number - "7.1.0"
+3 - redcap path - "index.php?pid=22" or "ControlCenter/index.php" or "ControlCenter/"
+*/
+
 $uriVersion = empty($uriMatches[2]) ? NULL : $uriMatches[2];
+
+// error_log('uri matches: ' . print_r($uriMatches, true));
+
+// TJ - separate query string from path if query string exists. (for path validation)
+if (!empty($uriMatches[3])) { // index.php?pid=22 or ControlCenter/index.php or ControlCenter/
+    // error_log('begin matching query string... ' . $uriMatches[3]);
+    $re2 = '/^(\/.*)(\?.*)$/'; // https://regex101.com/r/kGHTsH/1
+    // $re2 = '/^(\/.*)(\?.*)$/';/
+    $match2 = preg_match($re2, $uriMatches[3], $qryMatches);
+    // error_log('qryMatches: ' . print_r($qryMatches, true));
+    // if (!empty($qryMatches[2])) { // e.g., index.php?pid=21&page=my_first_instrument&id=1&event_id=50&instance=1&msg=edit
+    if ($match2 === 1) { // e.g., index.php?pid=21&page=my_first_instrument&id=1&event_id=50&instance=1&msg=edit
+        $uriMatches[3] = $qryMatches[1]; // e.g., index.php
+        $uriMatches[4] = $qryMatches[2]; // e.g., ?pid=21&page=my_first_instrument&id=1&event_id=50&instance=1&msg=edit
+    }
+    else {
+    	$uriMatches[4] = '';
+    }
+}
 
 // See if we have a version in the url and it is not current
 if (!empty($uriVersion) && ($uriVersion !== $redcap_version)) {
+    // error_log('uri version: ' . $uriVersion . '; redcap version: ' . $redcap_version);
 
     // Rebuild the new url with the current db version
     $newUrl = $uriMatches[1] . $redcap_version . $uriMatches[3];
 
     // Build the server path to the url
     $newUrlPath = $_SERVER['DOCUMENT_ROOT'] . $newUrl;
+    // error_log("checking if " . $newUrlPath . " exists ...");
 
     // Check if path is valid
     if (file_exists($newUrlPath)) {
+        // error_log($newUrlPath . " exists!");
         // Let's build the redirect uri (which includes the query string)
         $newUri = $newUrl . $uriMatches[4];
+        // error_log('redirecting to: ' . $newUri);
         // Plugin::log("Redirecting to new uri: " . $newUri);
         redirect($newUri);
         die();
     } else {
         // Plugin::log("After updating version, file in URL doesn't exist: " . $newUrlPath);
+        // error_log("After updating version, file in URL doesn't exist: " . $newUrlPath);
     }
 }
 
@@ -70,7 +117,17 @@ if (!empty($uriVersion) && ($uriVersion !== $redcap_version)) {
 http_response_code(404);
 $HtmlPage = new HtmlPage();
 $HtmlPage->PrintHeaderExt();
-$fullUrl = $_SERVER['REQUEST_SCHEME'] . "://" . $_SERVER['SERVER_NAME'] . $requestUri;
+
+// TJ Get Server Request scheme ('http' vs 'https') - 11/7/2019
+if ( (! empty($_SERVER['REQUEST_SCHEME']) && $_SERVER['REQUEST_SCHEME'] == 'https') ||
+     (! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on') ||
+     (! empty($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == '443') ) {
+    $server_request_scheme = 'https';
+} else {
+    $server_request_scheme = 'http';
+}
+
+$fullUrl = $server_request_scheme . "://" . $_SERVER['SERVER_NAME'] . $requestUri;
 $mailUrl = "mailto:$homepage_contact_email?subject=Invalid-404-Url&body=" .
     rawurlencode(htmlspecialchars_decode( "The following url was not found:\n\n" . $fullUrl . "\n\n"));
 
