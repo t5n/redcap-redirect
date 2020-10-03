@@ -34,9 +34,15 @@
 define('NOAUTH',true);
 require_once("redcap_connect.php");
 
+/*// Debug
+ini_set("display_errors",1);
+ini_set("log_errors",1);
+error_reporting(E_ALL);*/
+
 /* @var string $homepage_contact_email */
 /* @var string $redcap_version */
-global $homepage_contact_email, $redcap_version;
+/* @var string $redcap_base_url */
+global $homepage_contact_email, $redcap_version, $redcap_base_url;
 
 // $requestUri = $_SERVER['REQUEST_URI'];
 $requestUri = filter_var($_SERVER['REQUEST_URI'], FILTER_SANITIZE_URL);
@@ -45,7 +51,7 @@ $requestUri = filter_var($_SERVER['REQUEST_URI'], FILTER_SANITIZE_URL);
 
 // Check the redirectURL for a redcap version - https://regex101.com/r/jisap2/1
 # $re = '/^(.*\/redcap_v)(\d+\.\d+\.\d+)(\/.*)(\?.*)$/';
-// TJ - https://www.regexplanet.com/share/index.html?share=yyyyuj3e86r
+// TJ - regex change - capture path and query string together in last group, parse this group separately
 $re = '/^(.*\/redcap_v)(\d+\.\d+\.\d+)(\/.*)$/'; // https://regex101.com/r/WMx39W/1
 
 /*
@@ -149,7 +155,7 @@ $mailUrl = "mailto:$homepage_contact_email?subject=Invalid-404-Url&body=" .
         </table>
         <hr class="my-4">
         <p class="lead">
-            <a class="btn btn-danger text-white btn-lg mr-2" href="/" role="button">Return to Home Page</a>
+            <a class="btn btn-danger text-white btn-lg mr-2" href="<?php echo $redcap_base_url ?>" role="button">Return to Home Page</a>
             <a class="btn btn-danger text-white btn-lg" target="_BLANK" href="<?php echo $mailUrl ?>" role="button">Contact Us</a>
         </p>
     </div>
